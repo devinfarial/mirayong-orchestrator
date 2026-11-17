@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+sqlalchemy[asyncio]
+greenlet
+asyncpg
+alembic
+redis
+pytest
+pytest-asyncio
+httpx
+aiosqlite
+anthropic
+google-genai=0.6.5
+pydantic-settings
