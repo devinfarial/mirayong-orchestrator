@@ -52,6 +52,7 @@ def fake_repo(monkeypatch):
         target_age_band="4-6",
         description=None,
         status="draft",
+        language="id",
         script_json=None,
     )
     saved = {}

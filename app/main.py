@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.db.session import engine, get_db
 from app.api.episode import router as episode_router
 from app.api.ai import router as ai_router
+from app.api.job import router as job_router
 from app.services.ai_service import ai_service
 
 @asynccontextmanager
@@ -38,6 +39,10 @@ app.include_router(
     prefix=settings.API_V1_PREFIX
 )
 
+app.include_router(
+    job_router,
+    prefix=settings.API_V1_PREFIX
+)
 
 @app.get("/health")
 async def health_check():

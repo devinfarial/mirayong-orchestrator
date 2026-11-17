@@ -36,6 +36,13 @@ class Episode(Base):
         nullable=True
     )
 
+    language: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default="id",
+        server_default="id"
+    )
+
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,

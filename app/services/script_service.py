@@ -47,8 +47,8 @@ def build_user_prompt(episode: Episode) -> str:
     lines = [
         f"Topic: {episode.topic or episode.title}",
         f"Working title: {episode.title}",
-        f"Target age band: "
-        f"{episode.target_age_band or settings.DEFAULT_TARGET_AGE_BAND}",
+        f"Target age band: {episode.target_age_band or settings.DEFAULT_TARGET_AGE_BAND}",
+        f"Language: {episode.language or settings.DEFAULT_LANGUAGE}",
     ]
     if episode.description:
         lines.append(f"Notes from the producer: {episode.description}")

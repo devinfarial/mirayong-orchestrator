@@ -1,9 +1,10 @@
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.state_machine import EpisodeStatus, validate_transition
 from app.models.episode import Episode
 from app.schemas.episode import EpisodeCreate, EpisodeUpdate
+
 
 class EpisodeRepository:
 
@@ -16,7 +17,8 @@ class EpisodeRepository:
             title=episode_data.title,
             description=episode_data.description,
             topic=episode_data.topic,
-            target_age_band=episode_data.target_age_band
+            target_age_band=episode_data.target_age_band,
+            language=episode_data.language
         )
 
         db.add(episode)
@@ -46,7 +48,6 @@ class EpisodeRepository:
 
         return list(result.scalars().all())
 
-
     @staticmethod
     async def update(
         db: AsyncSession,
@@ -54,6 +55,12 @@ class EpisodeRepository:
         episode_data: EpisodeUpdate
     ) -> Episode:
         update_data = episode_data.model_dump(exclude_unset=True)
+
+        if "status" in update_data and update_data["status"] is not None:
+            update_data["status"] = validate_transition(
+                episode.status,
+                update_data["status"]
+            ).value
 
         for field, value in update_data.items():
             setattr(episode, field, value)
@@ -63,6 +70,21 @@ class EpisodeRepository:
 
         return episode
 
+    @staticmethod
+    async def transition_status(
+        db: AsyncSession,
+        episode: Episode,
+        target_status: EpisodeStatus
+    ) -> Episode:
+        episode.status = validate_transition(
+            episode.status,
+            target_status
+        ).value
+
+        await db.commit()
+        await db.refresh(episode)
+
+        return episode
 
     @staticmethod
     async def save_script(
@@ -70,14 +92,16 @@ class EpisodeRepository:
         episode: Episode,
         script: dict
     ) -> Episode:
+        episode.status = validate_transition(
+            episode.status,
+            EpisodeStatus.SCRIPT_READY
+        ).value
         episode.script_json = script
-        episode.status = "script_ready"
 
         await db.commit()
         await db.refresh(episode)
 
         return episode
-
 
     @staticmethod
     async def delete(

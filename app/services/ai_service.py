@@ -1,11 +1,12 @@
 
-from anthropic import AsyncAnthropic
 from google import genai
-
 from app.core.config import settings
 import time
+from anthropic import APIError as AnthropicAPIError, AsyncAnthropic
+from google.genai.errors import APIError as GeminiAPIError
 
-
+class AIProviderError(Exception):
+    """Raised when the upstream AI provider (Anthropic or Gemini) fails."""
 
 class AIService:
 
@@ -43,13 +44,14 @@ class AIService:
         max_tokens: int = 1024
     ) -> str:
 
-        if self.provider == "anthropic":
-            return await self._generate_anthropic(prompt, system, max_tokens)
-
-        if system:
-            prompt = f"{system}\n\n---\n\n{prompt}"
-
-        return await self._generate_gemini(prompt)
+        try:
+            if self.provider == "anthropic":
+                return await self._generate_anthropic(prompt, system, max_tokens)
+            if system:
+                prompt = f"{system}\n\n---\n\n{prompt}"
+            return await self._generate_gemini(prompt)
+        except (AnthropicAPIError, GeminiAPIError) as e:
+            raise AIProviderError(str(e)) from e
 
     async def _generate_anthropic(
         self,
@@ -108,4 +110,11 @@ class AIService:
             await self.gemini_client.aio.aclose()
 
 
+    @property
+    def model_name(self) -> str:
+        if self.provider == "anthropic":
+            return settings.ANTHROPIC_MODEL
+        return settings.GEMINI_MODEL
+
+    
 ai_service = AIService()

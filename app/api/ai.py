@@ -1,5 +1,5 @@
 
-from anthropic import APIError
+from app.services.ai_service import AIProviderError
 from fastapi import APIRouter, HTTPException, status
 
 from app.schemas.ai import AIChatRequest, AIChatResponse
@@ -25,11 +25,11 @@ async def chat(request: AIChatRequest):
 
         return AIChatResponse(
             response=response,
-            model="Claude"
+            model=ai_service.model_name
         )
 
     
-    except APIError as e:
+    except AIProviderError  as e:
         print(f"Anthropic API Error: {type(e).__name__}")
         print(f"Error details: {e}")
 

@@ -11,5 +11,5 @@ pytest-asyncio
 httpx
 aiosqlite
 anthropic
-google-genai=0.6.5
-pydantic-settings
+google-genai==0.6.5
+celery
