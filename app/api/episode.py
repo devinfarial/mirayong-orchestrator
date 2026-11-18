@@ -4,7 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cost_manager import BudgetExceededError
 from app.core.orchestration import WorkflowError, WorkflowOrchestrator
 from app.db.session import get_db
+from app.providers.base import MediaProviderError
+from app.providers.youtube import YouTubePublishError
 from app.repositories.job_repository import JobRepository
+from app.repositories.scene_repository import SceneRepository
 from app.schemas.episode import (
     EpisodeCreate,
     EpisodeResponse,
@@ -12,18 +15,17 @@ from app.schemas.episode import (
     EpisodeUpdate,
 )
 from app.schemas.job import GenerationJobResponse
+from app.schemas.scene import SceneResponse
 from app.services.ai_service import AIProviderError
+from app.services.asset_service import AssetGenerationError
 from app.services.episode_service import EpisodeService
+from app.services.rendering_service import RenderingError
 from app.services.script_service import (
     ScriptGenerationError,
     ScriptNotAllowedError,
     ScriptService,
 )
-
-from app.providers.base import MediaProviderError
-from app.repositories.scene_repository import SceneRepository
-from app.schemas.scene import SceneResponse
-from app.services.asset_service import AssetGenerationError
+from app.services.validation_service import ValidationFailedError
 
 router = APIRouter(
     prefix="/episodes",
@@ -135,7 +137,55 @@ async def generate_next_stage(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=str(e)
         )
-    except (ScriptGenerationError, AIProviderError, AssetGenerationError, MediaProviderError) as e:
+    except (
+        ScriptGenerationError,
+        AIProviderError,
+        AssetGenerationError,
+        MediaProviderError,
+        RenderingError,
+        ValidationFailedError,
+        YouTubePublishError,
+    ) as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e)
+        )
+
+
+@router.post(
+    "/{episode_id}/run-pipeline",
+    response_model=list[GenerationJobResponse]
+)
+async def run_episode_pipeline(
+    episode_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        return await WorkflowOrchestrator.run_pipeline(db, episode_id)
+    except LookupError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except WorkflowError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e)
+        )
+    except BudgetExceededError as e:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=str(e)
+        )
+    except (
+        ScriptGenerationError,
+        AIProviderError,
+        AssetGenerationError,
+        MediaProviderError,
+        RenderingError,
+        ValidationFailedError,
+        YouTubePublishError,
+    ) as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e)
@@ -163,6 +213,7 @@ async def get_episode_status(
         jobs=jobs
     )
 
+
 @router.get(
     "/{episode_id}/scenes",
     response_model=list[SceneResponse]
@@ -178,6 +229,60 @@ async def get_episode_scenes(
             detail=f"Episode with ID {episode_id} not found"
         )
     return await SceneRepository.get_by_episode_id(db, episode_id)
+
+
+@router.post(
+    "/{episode_id}/reset-assets",
+    response_model=EpisodeResponse
+)
+async def reset_episode_assets(
+    episode_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Revert an episode back to 'script_ready' and reset its scenes to 'pending' so assets can be regenerated."""
+    episode = await EpisodeService.get_episode(db, episode_id)
+    if episode is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Episode with ID {episode_id} not found"
+        )
+    if not episode.script_json:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Episode does not have a script yet"
+        )
+
+    await SceneRepository.reset_by_episode_id(db, episode_id)
+    episode.status = "script_ready"
+    episode.render_path = None
+    await db.commit()
+    await db.refresh(episode)
+    return episode
+
+
+@router.post(
+    "/{episode_id}/render",
+    response_model=EpisodeResponse
+)
+async def render_episode_now(
+    episode_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Render (or re-render) an episode's scene video + audio files into the final 9:16 MP4."""
+    from app.services.rendering_service import RenderingService
+    try:
+        await RenderingService.render_episode(db, episode_id)
+    except LookupError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except RenderingError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e)
+        )
+    return await EpisodeService.get_episode(db, episode_id)
 
 
 @router.post(
@@ -205,7 +310,15 @@ async def retry_episode(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=str(e)
         )
-    except (ScriptGenerationError, AIProviderError, AssetGenerationError, MediaProviderError) as e:
+    except (
+        ScriptGenerationError,
+        AIProviderError,
+        AssetGenerationError,
+        MediaProviderError,
+        RenderingError,
+        ValidationFailedError,
+        YouTubePublishError,
+    ) as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e)

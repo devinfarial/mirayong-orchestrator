@@ -13,3 +13,5 @@ aiosqlite
 anthropic
 google-genai==0.6.5
 celery
+imageio-ffmpeg
+celery

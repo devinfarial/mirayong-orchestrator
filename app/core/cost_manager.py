@@ -76,3 +76,35 @@ class CostManager:
             )
 
         return projected
+
+    @staticmethod
+    async def get_monthly_report(
+        db: AsyncSession,
+        now: datetime | None = None
+    ) -> dict:
+        current_time = now or datetime.now(timezone.utc)
+        current_spend = await JobRepository.get_monthly_spend(
+            db,
+            year=current_time.year,
+            month=current_time.month
+        )
+        budget = settings.MONTHLY_BUDGET_USD
+        remaining = round(max(0.0, budget - current_spend), 4)
+        utilization_pct = round((current_spend / budget) * 100.0, 2) if budget > 0 else 0.0
+
+        alerts: list[str] = []
+        if budget > 0 and (current_spend / budget) >= settings.BUDGET_ALERT_THRESHOLD_PCT:
+            alerts.append(
+                f"BUDGET_THRESHOLD_WARNING: Monthly spend ${current_spend:.2f} has reached "
+                f"{utilization_pct:.1f}% of ${budget:.2f} budget"
+            )
+
+        return {
+            "year": current_time.year,
+            "month": current_time.month,
+            "budget_usd": budget,
+            "current_spend_usd": round(current_spend, 4),
+            "remaining_budget_usd": remaining,
+            "utilization_pct": utilization_pct,
+            "alerts": alerts,
+        }

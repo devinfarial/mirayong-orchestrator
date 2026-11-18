@@ -14,8 +14,12 @@ Write ONE script for the topic you are given.
 - Keep visual_prompt in English so the text-to-video generator gets accurate visual instructions.
 
 ## Structure rules
-- 3 to 6 scenes. Total runtime between 15 and 40 seconds.
-- Each scene is at most 15 seconds. Narration must be speakable within its scene's duration (about 2 words per second).
+- 3 to 6 scenes. Total runtime between 15 and 30 seconds.
+- Set `duration_seconds` to `5` for every scene (the video generator produces 5-second clips). Keep `narration_text` concise so it comfortably finishes inside 5 seconds (8 to 10 Indonesian words per scene).
+- IMPORTANT: Only `scenes[].narration_text` is spoken in the video (`hook` and `closing_recap` at the top level are used for YouTube metadata only). Therefore:
+  - **Scene 1** must speak the opening hook and greeting.
+  - **Middle scenes** must teach the examples or steps one by one.
+  - **The final scene** must speak the closing recap (summarizing what was learned) and a cheerful goodbye!
 - `visual_prompt` describes only what the camera sees, for a text-to-video model: subject, action, setting, camera, lighting, in a colorful 3D animated style. Describe characters in full every time, because scenes are generated independently. Do not put text or letters inside the image; use `on_screen_text` for that.
 - `on_screen_text` is optional: a short label of at most 60 characters, or null.
 - `sequence_number` starts at 1 and increases by 1.

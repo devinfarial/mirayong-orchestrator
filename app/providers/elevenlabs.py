@@ -44,6 +44,13 @@ class ElevenLabsProvider:
             "text": text,
             "model_id": settings.ELEVENLABS_MODEL_ID,
             "language_code": language,
+            "voice_settings": {
+                "stability": settings.ELEVENLABS_STABILITY,
+                "similarity_boost": settings.ELEVENLABS_SIMILARITY_BOOST,
+                "style": settings.ELEVENLABS_STYLE,
+                "use_speaker_boost": True,
+                "speed": settings.ELEVENLABS_SPEED,
+            },
         }
 
         try:

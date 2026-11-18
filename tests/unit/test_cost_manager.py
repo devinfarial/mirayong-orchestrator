@@ -37,10 +37,10 @@ SAMPLE_SCRIPT = {
 
 
 def test_estimate_assets_cost_calculates_video_and_tts():
-    # 20 seconds total * $0.15/s = $3.00 + tiny TTS character cost
+    # 20 seconds total * $0.07/s = $1.40 + tiny TTS character cost
     cost = CostManager.estimate_assets_cost(SAMPLE_SCRIPT)
-    assert cost > 3.00
-    assert cost < 3.10
+    assert cost > 1.40
+    assert cost < 1.50
 
 
 async def test_check_budget_allows_within_cap(monkeypatch):

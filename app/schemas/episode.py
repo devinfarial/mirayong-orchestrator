@@ -24,6 +24,8 @@ class EpisodeResponse(BaseModel):
     language: str
     status: str
     script_json: EpisodeScript | None
+    render_path: str | None = None
+    youtube_video_id: str | None = None
     created_at: datetime
     updated_at: datetime
 

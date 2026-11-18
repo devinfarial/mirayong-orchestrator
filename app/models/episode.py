@@ -55,6 +55,15 @@ class Episode(Base):
         nullable=True
     )
 
+    render_path: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True
+    )
+    youtube_video_id: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

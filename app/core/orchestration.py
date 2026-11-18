@@ -1,13 +1,17 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.cost_manager import CostManager
 from app.core.state_machine import EpisodeStatus
 from app.models.episode import Episode
 from app.models.generation_job import GenerationJob, JobStage, JobStatus
 from app.repositories.episode_repository import EpisodeRepository
 from app.repositories.job_repository import JobRepository
-from app.services.script_service import ScriptService
 from app.services.asset_service import AssetService
+from app.services.publishing_service import PublishingService
+from app.services.rendering_service import RenderingService
+from app.services.script_service import ScriptService
+from app.services.validation_service import ValidationService
 
 
 class WorkflowError(Exception):
@@ -21,6 +25,7 @@ NEXT_STAGE_BY_STATUS: dict[EpisodeStatus, tuple[JobStage, EpisodeStatus]] = {
     EpisodeStatus.ASSETS_GENERATED: (JobStage.RENDER, EpisodeStatus.RENDERED),
     EpisodeStatus.RENDERED: (JobStage.VALIDATE, EpisodeStatus.VALIDATED),
     EpisodeStatus.VALIDATED: (JobStage.PUBLISH, EpisodeStatus.PUBLISHED),
+    EpisodeStatus.PUBLISH_QUEUED: (JobStage.PUBLISH, EpisodeStatus.PUBLISHED),
 }
 
 # Maps a failed JobStage back to the EpisodeStatus needed to retry it
@@ -115,12 +120,18 @@ class WorkflowOrchestrator:
         if stage == JobStage.SCRIPT:
             await ScriptService.generate_script(db, episode.id)
             return estimated_cost
-
         if stage == JobStage.ASSETS:
             return await AssetService.generate_episode_assets(db, episode.id)
+        if stage == JobStage.RENDER:
+            await RenderingService.render_episode(db, episode.id)
+            return 0.0
+        if stage == JobStage.VALIDATE:
+            await ValidationService.validate_episode(db, episode.id)
+            return 0.0
+        if stage == JobStage.PUBLISH:
+            await PublishingService.publish_episode(db, episode.id)
+            return 0.0
 
-        # Placeholder for Milestones 5 & 6 (Render, Validate, Publish):
-        await EpisodeRepository.transition_status(db, episode, target_status)
         return estimated_cost
 
     @staticmethod
@@ -151,3 +162,34 @@ class WorkflowOrchestrator:
         # Restore the episode to the pre-failure status and re-run that stage
         await EpisodeRepository.transition_status(db, episode, recovery_status)
         return await WorkflowOrchestrator.run_next_stage(db, episode_id)
+
+    @staticmethod
+    async def run_pipeline(
+        db: AsyncSession,
+        episode_id: int
+    ) -> list[GenerationJob]:
+        """
+        Run all remaining workflow stages for an episode sequentially.
+        Stops at VALIDATED for human review unless settings.ALLOW_UNATTENDED_PUBLISH is True.
+        """
+        executed_jobs: list[GenerationJob] = []
+
+        while True:
+            episode = await EpisodeRepository.get_by_id(db, episode_id)
+            if episode is None:
+                raise LookupError(f"Episode with ID {episode_id} not found")
+
+            if episode.status == EpisodeStatus.PUBLISHED.value:
+                break
+
+            if (
+                episode.status == EpisodeStatus.VALIDATED.value
+                and not settings.ALLOW_UNATTENDED_PUBLISH
+            ):
+                # Human review gate: stop at VALIDATED until approved or unattended mode enabled
+                break
+
+            job = await WorkflowOrchestrator.run_next_stage(db, episode_id)
+            executed_jobs.append(job)
+
+        return executed_jobs

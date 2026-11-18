@@ -77,3 +77,36 @@ class SceneRepository:
         await db.commit()
         await db.refresh(scene)
         return scene
+
+    @staticmethod
+    async def reset_by_episode_id(
+        db: AsyncSession,
+        episode_id: int
+    ) -> list[Scene]:
+        """
+        Reset all scenes of an episode back to pending and remove old audio files
+        so new voice settings take effect (while preserving any generated .mp4 video clips).
+        """
+        from pathlib import Path
+        from app.core.config import settings
+
+        base_dir = Path(settings.STORAGE_DIR)
+        scenes = await SceneRepository.get_by_episode_id(db, episode_id)
+        for scene in scenes:
+            for candidate in (
+                Path(scene.audio_path) if scene.audio_path else None,
+                base_dir / "audio" / f"episode_{episode_id}_scene_{scene.sequence_number}.mp3",
+            ):
+                if candidate and candidate.exists():
+                    candidate.unlink(missing_ok=True)
+
+            scene.generation_status = SceneGenerationStatus.PENDING.value
+            scene.audio_path = None
+            scene.video_path = None
+            scene.provider_request_id = None
+            scene.actual_cost = 0.0
+
+        await db.commit()
+        for scene in scenes:
+            await db.refresh(scene)
+        return scenes
